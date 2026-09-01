@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  enterprise-mcp:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: enterprise-mcp
+    ports:
+      - "8080:8080"
+    environment:
+      - MCP_SERVER_NAME=enterprise-mcp
+      - AUTH_ENABLED=true
+      - API_TOKENS=${API_TOKENS:-dev-token-123}
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_PER_MINUTE=60
+      - DESENSITIZE_ENABLED=true
+      - AUDIT_ENABLED=true
+      - AUDIT_OUTPUT=console
+      - REDIS_ENABLED=false
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
