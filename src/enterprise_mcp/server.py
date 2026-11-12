@@ -14,6 +14,8 @@ import logging
 from typing import Any
 
 import uvicorn
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from enterprise_mcp.auth import BearerTokenAuthProvider
 from enterprise_mcp.config import Settings, get_settings
@@ -61,7 +63,19 @@ def build_server(settings: Settings | None = None) -> FastMCP:
     # 3. 注册业务工具
     register_tools(mcp)
 
-    # 4. 注册企业级中间件（顺序：限流 → 会话隔离 → 审计 → 脱敏）
+    # 4. K8s 探针：Deployment 的 readiness/liveness 都指向 /health
+    @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
+    async def health(_: Request) -> JSONResponse:
+        """返回服务存活状态，供 K8s readiness/liveness 探针使用。"""
+        return JSONResponse(
+            {
+                "status": "ok",
+                "server": settings.server_name,
+                "version": settings.version,
+            }
+        )
+
+    # 5. 注册企业级中间件（顺序：限流 → 会话隔离 → 审计 → 脱敏）
     if settings.rate_limit_enabled:
         mcp.add_middleware(CustomRateLimitMiddleware(per_minute=settings.rate_limit_per_minute))
         logger.info("rate limiting enabled: %s/min", settings.rate_limit_per_minute)

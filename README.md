@@ -33,7 +33,7 @@
 - 🧩 **会话隔离**：多租户数据隔离，不同 client 只见自己的数据
 - 📦 **开箱即用**：自带简历检索、人才画像示例业务工具
 - 🚀 **部署就绪**：Dockerfile / docker-compose / K8s Deployment / GitHub Actions CI
-- 🧪 **测试完备**：单元 + 集成测试（13 个用例），可直接跑 CI
+- 🧪 **测试完备**：单元 + 集成测试（14 个用例），可直接跑 CI
 
 ## 快速开始 Quick Start
 
@@ -140,6 +140,8 @@ kubectl apply -f deploy/k8s/deployment.yaml
 # 3. 接入 Ingress + mTLS
 ```
 
+`deployment.yaml` 的 readiness/liveness 探针请求 `/health`；该路由由 `server.py` 内置返回 `{"status":"ok"}`，可直接用于 K8s 健康检查。
+
 ## 如何扩展你的业务 Tools
 
 在 `src/enterprise_mcp/tools/` 下新建模块，注册即可：
@@ -162,7 +164,7 @@ def register_tools(mcp: FastMCP) -> None:
 
 ```bash
 pytest tests/ -v
-# 13 passed
+# 14 passed
 ```
 
 ## Roadmap

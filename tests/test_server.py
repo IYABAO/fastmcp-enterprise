@@ -2,6 +2,7 @@
 
 import asyncio
 
+import httpx
 import pytest
 
 from enterprise_mcp.config import Settings
@@ -58,6 +59,24 @@ async def test_desensitize_middleware_masks_phone_in_output():
     text = result.content[0].text
     assert "139****4321" in text
     assert "13987654321" not in text
+
+
+@pytest.mark.asyncio
+async def test_health_route_returns_ok_for_k8s_probe():
+    s = Settings(
+        auth_enabled=False,
+        rate_limit_enabled=False,
+        desensitize_enabled=False,
+        audit_enabled=False,
+        session_isolate_enabled=False,
+    )
+    mcp = build_server(s)
+    transport = httpx.ASGITransport(app=mcp.http_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["server"] == "enterprise-mcp"
 
 
 @pytest.mark.asyncio
