@@ -6,6 +6,7 @@ from enterprise_mcp.middleware.middleware import (
     AuditMiddleware,
     CustomRateLimitMiddleware,
     DesensitizeMiddleware,
+    MetricsMiddleware,
     SessionIsolationMiddleware,
 )
 from enterprise_mcp.middleware.rate_limiter import SlidingWindowRateLimiter
@@ -15,6 +16,7 @@ __all__ = [
     "AuditMiddleware",
     "CustomRateLimitMiddleware",
     "DesensitizeMiddleware",
+    "MetricsMiddleware",
     "SessionIsolationMiddleware",
     "SlidingWindowRateLimiter",
     "desensitize_value",

@@ -15,15 +15,17 @@ from typing import Any
 
 import uvicorn
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from enterprise_mcp.auth import BearerTokenAuthProvider
 from enterprise_mcp.config import Settings, get_settings
+from enterprise_mcp.metrics import MetricsRegistry
 from enterprise_mcp.middleware import (
     AuditMiddleware,
     AuditLogger,
     CustomRateLimitMiddleware,
     DesensitizeMiddleware,
+    MetricsMiddleware,
     SessionIsolationMiddleware,
 )
 from enterprise_mcp.tools import register_tools
@@ -39,6 +41,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
     :return: 组装完成的 FastMCP 实例
     """
     settings = settings or get_settings()
+    metrics = MetricsRegistry()
 
     # 1. 鉴权（HTTP 层 Bearer Token）
     auth_provider = None
@@ -55,7 +58,7 @@ def build_server(settings: Settings | None = None) -> FastMCP:
         version=settings.version,
         instructions=(
             "企业级 MCP 服务模板。提供简历检索、人才画像分析等工具，"
-            "内置鉴权、限流、脱敏、审计与会话隔离能力。"
+            "内置鉴权、限流、脱敏、审计、会话隔离与 Prometheus 指标能力。"
         ),
         auth=auth_provider,
     )
@@ -75,9 +78,30 @@ def build_server(settings: Settings | None = None) -> FastMCP:
             }
         )
 
-    # 5. 注册企业级中间件（顺序：限流 → 会话隔离 → 审计 → 脱敏）
+    # 5. Prometheus 指标（内网抓取；生产环境应在 Ingress 层限制访问）
+    if settings.metrics_enabled:
+        @mcp.custom_route("/metrics", methods=["GET"], include_in_schema=False)
+        async def metrics_route(_: Request) -> Response:
+            """返回 Prometheus text exposition 格式的服务指标。"""
+            return Response(
+                content=metrics.render(
+                    server_name=settings.server_name, version=settings.version
+                ),
+                media_type="text/plain; version=0.0.4",
+            )
+
+    # 6. 注册企业级中间件（顺序：限流 → 会话隔离 → 审计 → 脱敏）
+    if settings.metrics_enabled:
+        mcp.add_middleware(MetricsMiddleware(metrics))
+        logger.info("prometheus metrics enabled at /metrics")
+
     if settings.rate_limit_enabled:
-        mcp.add_middleware(CustomRateLimitMiddleware(per_minute=settings.rate_limit_per_minute))
+        mcp.add_middleware(
+            CustomRateLimitMiddleware(
+                per_minute=settings.rate_limit_per_minute,
+                metrics=metrics if settings.metrics_enabled else None,
+            )
+        )
         logger.info("rate limiting enabled: %s/min", settings.rate_limit_per_minute)
 
     if settings.session_isolate_enabled:

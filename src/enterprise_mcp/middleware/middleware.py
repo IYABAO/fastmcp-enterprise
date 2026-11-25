@@ -18,6 +18,7 @@ from typing import Any
 from fastmcp.server.context import Context
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
+from enterprise_mcp.metrics import MetricsRegistry
 from enterprise_mcp.middleware.audit import AuditLogger
 from enterprise_mcp.middleware.desensitize import desensitize_value
 from enterprise_mcp.middleware.rate_limiter import SlidingWindowRateLimiter
@@ -58,6 +59,10 @@ class AuditMiddleware(Middleware):
     @staticmethod
     def _extract_tool_name(context) -> str | None:
         msg = getattr(context, "message", None)
+        if msg is not None:
+            name = getattr(msg, "name", None)
+            if name:
+                return name
         params = getattr(msg, "params", None)
         if params:
             return getattr(params, "name", None)
@@ -66,6 +71,10 @@ class AuditMiddleware(Middleware):
     @staticmethod
     def _extract_params(context) -> dict[str, Any] | None:
         msg = getattr(context, "message", None)
+        if msg is not None:
+            arguments = getattr(msg, "arguments", None)
+            if arguments is not None:
+                return arguments
         params = getattr(msg, "params", None)
         if params:
             return getattr(params, "arguments", None)
@@ -122,6 +131,38 @@ class SessionIsolationMiddleware(Middleware):
         return result
 
 
+class MetricsMiddleware(Middleware):
+    """指标中间件：记录工具调用次数、异常与耗时。"""
+
+    def __init__(self, metrics: MetricsRegistry):
+        self._metrics = metrics
+
+    async def on_call_tool(self, context, call_next):
+        start = time.perf_counter()
+        tool = self._extract_tool_name(context) or "unknown"
+        try:
+            result = await call_next(context)
+        except Exception:
+            self._metrics.record_tool_call(
+                tool, time.perf_counter() - start, error=True
+            )
+            raise
+        self._metrics.record_tool_call(tool, time.perf_counter() - start)
+        return result
+
+    @staticmethod
+    def _extract_tool_name(context) -> str | None:
+        msg = getattr(context, "message", None)
+        if msg is not None:
+            name = getattr(msg, "name", None)
+            if name:
+                return name
+        params = getattr(msg, "params", None)
+        if params:
+            return getattr(params, "name", None)
+        return None
+
+
 class CustomRateLimitMiddleware(Middleware):
     """自定义限流中间件（滑动窗口实现）。
 
@@ -130,12 +171,16 @@ class CustomRateLimitMiddleware(Middleware):
     - 按 client_id 维度限流
     """
 
-    def __init__(self, per_minute: int = 60):
+    def __init__(self, per_minute: int = 60, metrics: MetricsRegistry | None = None):
         self._limiter = SlidingWindowRateLimiter(max_requests=per_minute, window_seconds=60)
+        self._metrics = metrics
 
     async def on_request(self, context, call_next):
         key = self._client_key(context)
-        if not self._limiter.allow(key):
+        allowed = self._limiter.allow(key)
+        if self._metrics is not None:
+            self._metrics.record_rate_limit(allowed)
+        if not allowed:
             raise PermissionError(f"rate limit exceeded for {key}")
         return await call_next(context)
 

@@ -56,6 +56,9 @@ class Settings:
     audit_output: str = "console"  # console | file
     audit_log_file: str = "logs/audit.log"
 
+    # 指标
+    metrics_enabled: bool = True
+
     # Redis
     redis_enabled: bool = False
     redis_url: str = "redis://localhost:6379/0"
@@ -84,6 +87,7 @@ class Settings:
             audit_enabled=_env_bool("AUDIT_ENABLED", True),
             audit_output=os.getenv("AUDIT_OUTPUT", "console"),
             audit_log_file=os.getenv("AUDIT_LOG_FILE", "logs/audit.log"),
+            metrics_enabled=_env_bool("METRICS_ENABLED", True),
             redis_enabled=_env_bool("REDIS_ENABLED", False),
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             host=os.getenv("HOST", "0.0.0.0"),

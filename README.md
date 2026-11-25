@@ -30,10 +30,11 @@
 - 🛡 **数据脱敏**：手机号、身份证、邮箱等 PII 自动脱敏（字段级 + 正则级）
 - ⏱ **限流**：滑动窗口限流器，按客户端维度（可替换 Redis 多实例共享）
 - 📋 **审计日志**：记录每次工具调用的调用方 / 时间 / 入参 / 出参
+- 📊 **可观测性**：Prometheus `/metrics` 暴露工具调用数、异常数、耗时与限流拒绝数
 - 🧩 **会话隔离**：多租户数据隔离，不同 client 只见自己的数据
 - 📦 **开箱即用**：自带简历检索、人才画像示例业务工具
 - 🚀 **部署就绪**：Dockerfile / docker-compose / K8s Deployment / GitHub Actions CI
-- 🧪 **测试完备**：单元 + 集成测试（14 个用例），可直接跑 CI
+- 🧪 **测试完备**：单元 + 集成测试（19 个用例），可直接跑 CI
 
 ## 快速开始 Quick Start
 
@@ -92,10 +93,11 @@ fastmcp-enterprise/
 │   │   ├── authenticator.py   # Token 校验 + 会话注册表
 │   │   └── provider.py        # FastMCP AuthProvider 实现
 │   ├── middleware/
-│   │   ├── middleware.py      # 审计 / 脱敏 / 会话隔离 / 限流中间件
+│   │   ├── middleware.py      # 审计 / 脱敏 / 会话隔离 / 限流 / 指标中间件
 │   │   ├── desensitize.py     # PII 脱敏引擎
 │   │   ├── audit.py           # 审计日志器
 │   │   └── rate_limiter.py    # 滑动窗口限流器
+│   ├── metrics.py             # Prometheus 指标注册表与文本输出
 │   └── tools/
 │       └── demo_tools.py      # 示例业务工具（简历检索等）
 ├── deploy/
@@ -118,6 +120,7 @@ fastmcp-enterprise/
 | `DESENSITIZE_FIELDS` | `phone,id_card,...` | 需要脱敏的字段名 |
 | `AUDIT_ENABLED` | `true` | 是否启用审计日志 |
 | `AUDIT_OUTPUT` | `console` | 审计输出：`console` / `file` |
+| `METRICS_ENABLED` | `true` | 是否暴露 Prometheus `/metrics` |
 | `REDIS_ENABLED` | `false` | 是否启用 Redis（跨实例限流/会话） |
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | HTTP 监听地址 |
 
@@ -142,6 +145,16 @@ kubectl apply -f deploy/k8s/deployment.yaml
 
 `deployment.yaml` 的 readiness/liveness 探针请求 `/health`；该路由由 `server.py` 内置返回 `{"status":"ok"}`，可直接用于 K8s 健康检查。
 
+### 可观测性 Metrics
+
+服务启动后直接抓取 Prometheus 文本指标：
+
+```bash
+curl -i http://localhost:8080/metrics
+```
+
+指标包含 `enterprise_mcp_tool_calls_total`、`enterprise_mcp_tool_errors_total`、`enterprise_mcp_tool_duration_seconds` 与 `enterprise_mcp_rate_limit_rejected_total`。`/metrics` 与 `/health` 一样不经过 MCP Bearer 鉴权，**只应在集群内网或受 Ingress 白名单保护的环境暴露**；不需要时设置 `METRICS_ENABLED=false` 关闭。
+
 ## 如何扩展你的业务 Tools
 
 在 `src/enterprise_mcp/tools/` 下新建模块，注册即可：
@@ -164,14 +177,14 @@ def register_tools(mcp: FastMCP) -> None:
 
 ```bash
 pytest tests/ -v
-# 14 passed
+# 19 passed
 ```
 
 ## Roadmap
 
 - [ ] Redis 多实例限流 / 会话共享实现
 - [ ] JWT / OAuth2 鉴权 Provider 示例
-- [ ] Prometheus 指标暴露
+- [x] Prometheus 指标暴露（`/metrics`）
 - [ ] OpenTelemetry 链路追踪
 
 ## License
